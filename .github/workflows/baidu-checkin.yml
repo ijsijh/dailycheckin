@@ -1,0 +1,54 @@
+name: 百度网盘签到
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '50 1 * * *'   # 北京时间 09:50
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 由 Secrets 生成 config.json
+        env:
+          BAIDUWP_COOKIE: ${{ secrets.BAIDUWP_COOKIE }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          PUSHPLUS_TOPIC: ${{ secrets.PUSHPLUS_TOPIC }}
+        run: |
+          python - <<'PY'
+          import json, os
+          raw = os.getenv("BAIDUWP_COOKIE", "").strip()
+          accounts = []
+          if raw:
+              if raw.startswith("["):
+                  accounts = json.loads(raw)
+              else:
+                  accounts = [{"cookie": raw}]
+          cfg = {
+              "PUSHPLUS_TOKEN": os.getenv("PUSHPLUS_TOKEN", ""),
+              "PUSHPLUS_TOPIC": os.getenv("PUSHPLUS_TOPIC", ""),
+              "BAIDUWP": accounts,
+          }
+          with open("config.json", "w", encoding="utf-8") as f:
+              json.dump(cfg, f, ensure_ascii=False, indent=2)
+          print("账号数:", len(accounts))
+          PY
+
+      - name: 执行百度网盘签到
+        env:
+          PYTHONPATH: .
+        run: python dailycheckin/main.py --include BAIDUWP
